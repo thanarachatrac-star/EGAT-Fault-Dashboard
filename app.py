@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
@@ -33,6 +34,9 @@ EXCEL_SHAREPOINT_URL = (
 )
 SHEET_NAME = "Logbook"
 HEADER_ROW = 1
+
+SNAPSHOT_PATH = Path(__file__).parent / "data" / "fault_snapshot.csv.gz"
+SNAPSHOT_META_PATH = Path(__file__).parent / "data" / "fault_snapshot.meta.txt"
 
 
 BAR_COLORS = [
@@ -256,6 +260,28 @@ def load_sharepoint_dataframe(url: str) -> pd.DataFrame:
     return prepare(read_excel_bytes(raw))
 
 
+@st.cache_data(ttl=1800, show_spinner=False)
+def load_snapshot(path_str: str) -> pd.DataFrame:
+    path = Path(path_str)
+    df = pd.read_csv(path, compression="gzip", low_memory=False)
+    if "วันที่" in df.columns:
+        df["วันที่"] = pd.to_datetime(df["วันที่"], errors="coerce")
+    if "year_calc" not in df.columns:
+        df["year_calc"] = df["วันที่"].dt.year
+    if "month_calc" not in df.columns:
+        df["month_calc"] = df["วันที่"].dt.month
+    return df
+
+
+def save_runtime_snapshot(df: pd.DataFrame) -> None:
+    try:
+        SNAPSHOT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(SNAPSHOT_PATH, index=False, compression="gzip", encoding="utf-8-sig")
+        SNAPSHOT_META_PATH.write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def text_options(df, col):
     if col not in df.columns:
         return []
@@ -370,13 +396,20 @@ with st.sidebar:
         share_url = EXCEL_SHAREPOINT_URL
         if st.button("↻ Refresh Excel", use_container_width=True):
             st.cache_data.clear()
+            st.session_state["force_live_refresh"] = True
             st.rerun()
 
 try:
     if source_mode == "SharePoint link":
-        with st.spinner("กำลังเชื่อมต่อ SharePoint และเตรียม Dashboard..."):
-            df_all = load_sharepoint_dataframe(share_url)
-        source_text = "Excel SharePoint"
+        force_live = bool(st.session_state.pop("force_live_refresh", False))
+        if SNAPSHOT_PATH.exists() and not force_live:
+            df_all = load_snapshot(str(SNAPSHOT_PATH))
+            source_text = "Local snapshot (fast)"
+        else:
+            with st.spinner("กำลังเชื่อมต่อ SharePoint และเตรียม Dashboard..."):
+                df_all = load_sharepoint_dataframe(share_url)
+            save_runtime_snapshot(df_all)
+            source_text = "Excel SharePoint (live)"
     else:
         if uploaded is None:
             st.info("กรุณาเลือกไฟล์ Excel")
@@ -472,11 +505,11 @@ Trip type: {selected_trip}
 st.markdown(
     f"""
 <div class="hero">
-  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก หสก2-ส.</div>
+  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก ทสก2-ส.</div>
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • V8.3 
+    • ไม่มี AI • V9 Hybrid Fast Load
   </div>
 </div>
 """,
@@ -812,7 +845,7 @@ if view == "▤ Event Log":
 
 st.markdown(
     '<div style="text-align:center;color:#6f879a;font-size:11px;padding:20px 0 4px">'
-    'EGAT Fault Dashboard • V8.3 Cause Dropdown • Excel → Pandas → Plotly → Streamlit • No AI'
+    'EGAT Fault Dashboard • V9 Hybrid Fast Load • Excel → Pandas → Plotly → Streamlit • No AI'
     '</div>',
     unsafe_allow_html=True,
 )
