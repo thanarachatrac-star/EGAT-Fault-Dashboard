@@ -21,6 +21,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+PLOTLY_CONFIG = {
+    "displayModeBar": False,
+    "responsive": True,
+    "scrollZoom": False,
+}
+
 EXCEL_SHAREPOINT_URL = (
     "https://egatucc-my.sharepoint.com/:x:/g/personal/599320_egat_co_th/"
     "IQCa3BYjVfj4RqpmHfP8_VEEAWZ5i0luFrsoelLzPAT46Nw?e=yyLIJx"
@@ -55,6 +61,14 @@ THAI_MONTHS = [
     "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
     "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
 ]
+
+
+@st.cache_resource
+def get_http_session():
+    """Reuse HTTP connections while the Streamlit worker is alive."""
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0 EGAT-Fault-Dashboard/8.0"})
+    return session
 
 
 # ============================================================
@@ -197,13 +211,12 @@ def make_download_url(url: str) -> str:
     return urlunparse(p._replace(query=urlencode(q)))
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def download_sharepoint(url: str) -> bytes:
-    r = requests.get(
+    r = get_http_session().get(
         make_download_url(url),
-        timeout=60,
+        timeout=45,
         allow_redirects=True,
-        headers={"User-Agent": "Mozilla/5.0 EGAT-Fault-Dashboard/3.0"},
     )
     r.raise_for_status()
     b = r.content
@@ -214,7 +227,7 @@ def download_sharepoint(url: str) -> bytes:
     return b
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def read_excel_bytes(b: bytes) -> pd.DataFrame:
     return pd.read_excel(
         io.BytesIO(b),
@@ -236,7 +249,7 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=1800, show_spinner=False)
 def load_sharepoint_dataframe(url: str) -> pd.DataFrame:
     """Download, parse and prepare SharePoint Excel once, then reuse it."""
     raw = download_sharepoint(url)
@@ -248,6 +261,43 @@ def text_options(df, col):
         return []
     s = df[col].dropna().astype(str).str.strip()
     return sorted(s[s.ne("")].unique().tolist())
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def annual_counts(df_all: pd.DataFrame) -> pd.DataFrame:
+    out = (
+        df_all.dropna(subset=["year_calc"])
+        .assign(year_calc=lambda x: x["year_calc"].astype(int))
+        .groupby("year_calc").size()
+        .sort_index()
+        .reset_index(name="Fault")
+    )
+    out["year_calc"] = out["year_calc"].astype(str)
+    return out
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def cumulative_counts(df_all: pd.DataFrame, selected_year: int) -> pd.DataFrame:
+    compare_years = [selected_year, selected_year - 1, selected_year - 2]
+    rows = []
+    now = datetime.now()
+    for y in compare_years:
+        yd = df_all[df_all["year_calc"] == y]
+        cnt = (
+            yd.dropna(subset=["month_calc"])
+            .assign(month_calc=lambda x: x["month_calc"].astype(int))
+            .groupby("month_calc").size()
+            .reindex(range(1, 13), fill_value=0)
+        )
+        cum = cnt.cumsum()
+        max_m = now.month if y == now.year else 12
+        for m in range(1, max_m + 1):
+            rows.append({
+                "เดือน": THAI_MONTHS[m - 1],
+                "ปี": str(y),
+                "Fault สะสม": int(cum.loc[m]),
+            })
+    return pd.DataFrame(rows)
 
 
 def style_fig(fig, height=330, legend_top=True):
@@ -318,13 +368,13 @@ with st.sidebar:
         uploaded = st.file_uploader("เลือก Excel", type=["xlsx", "xlsm"])
     else:
         share_url = EXCEL_SHAREPOINT_URL
-        if st.button("↻ Refresh Excel", use_container_width=True):
+        if st.button("↻ Refresh Excel", use_container_width=True, config=PLOTLY_CONFIG):
             st.cache_data.clear()
             st.rerun()
 
 try:
     if source_mode == "SharePoint link":
-        with st.spinner("กำลังโหลดข้อมูลจาก SharePoint..."):
+        with st.spinner("กำลังเชื่อมต่อ SharePoint และเตรียม Dashboard..."):
             df_all = load_sharepoint_dataframe(share_url)
         source_text = "Excel SharePoint"
     else:
@@ -370,7 +420,7 @@ with st.sidebar:
 
     st.button("🔎 ค้นหาข้อมูล", use_container_width=True, type="primary")
 
-    if st.button("↻ รีเซ็ตตัวกรอง", use_container_width=True):
+    if st.button("↻ รีเซ็ตตัวกรอง", use_container_width=True, config=PLOTLY_CONFIG):
         st.session_state.clear()
         st.rerun()
 
@@ -415,19 +465,22 @@ Trip type: {selected_trip}
 st.markdown(
     f"""
 <div class="hero">
-  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้องในแผนก หสก2-ส.</div>
+  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก ทสก2-ส.</div>
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • UI V7 Performance
+    • ไม่มี AI • V8 Fast Startup
   </div>
 </div>
 """,
     unsafe_allow_html=True,
 )
 
-tab_overview, tab_recurring, tab_event = st.tabs(
-    ["▣ Overview", "↻ Recurring & Lockout", "▤ Event Log"]
+view = st.segmented_control(
+    "Dashboard section",
+    options=["▣ Overview", "↻ Recurring & Lockout", "▤ Event Log"],
+    default="▣ Overview",
+    label_visibility="collapsed",
 )
 
 if df.empty:
@@ -461,7 +514,7 @@ affected_lines = int(
 # OVERVIEW
 # ============================================================
 
-with tab_overview:
+if view == "▣ Overview":
 
     cols = st.columns(5)
     vals = [
@@ -492,7 +545,7 @@ with tab_overview:
                 "1) สาเหตุไฟฟ้าขัดข้อง",
                 f"<b>{total}</b><br><span style='font-size:12px'>ครั้ง</span>",
             ),
-            use_container_width=True,
+            use_container_width=True, config=PLOTLY_CONFIG,
         )
 
     monthly = (
@@ -522,7 +575,7 @@ with tab_overview:
             cliponaxis=False,
         )
         fig.update_layout(xaxis_title="เดือน", yaxis_title="จำนวนครั้ง")
-        st.plotly_chart(style_fig(fig,360), use_container_width=True)
+        st.plotly_chart(style_fig(fig,360), use_container_width=True, config=PLOTLY_CONFIG)
 
     volt_counts = (
         pd.to_numeric(df["Voltage (kV)"], errors="coerce")
@@ -537,7 +590,7 @@ with tab_overview:
                 "3) แยกตามระดับแรงดัน (kV)",
                 f"<b>{total}</b><br><span style='font-size:12px'>ครั้ง</span>",
             ),
-            use_container_width=True,
+            use_container_width=True, config=PLOTLY_CONFIG,
         )
 
     # Row 2: TMU / annual / top line
@@ -561,18 +614,11 @@ with tab_overview:
             )
             apply_bar_colors(fig)
             fig.update_traces(textposition="outside", cliponaxis=False)
-            st.plotly_chart(style_fig(fig,360), use_container_width=True)
+            st.plotly_chart(style_fig(fig,360), use_container_width=True, config=PLOTLY_CONFIG)
         else:
             st.info("ไม่มีข้อมูล TMU")
 
-    annual = (
-        df_all.dropna(subset=["year_calc"])
-        .assign(year_calc=lambda x: x["year_calc"].astype(int))
-        .groupby("year_calc").size()
-        .sort_index()
-        .reset_index(name="Fault")
-    )
-    annual["year_calc"] = annual["year_calc"].astype(str)
+    annual = annual_counts(df_all)
 
     with c5:
         fig = px.bar(annual, x="year_calc", y="Fault", text="Fault",
@@ -592,7 +638,7 @@ with tab_overview:
             cliponaxis=False,
         )
         fig.update_layout(xaxis_title=None, yaxis_title=None)
-        st.plotly_chart(style_fig(fig,360), use_container_width=True)
+        st.plotly_chart(style_fig(fig,360), use_container_width=True, config=PLOTLY_CONFIG)
 
     top_lines = (
         df["สายส่ง"].dropna().astype(str).str.strip().replace("",np.nan)
@@ -620,29 +666,11 @@ with tab_overview:
             yaxis_title=None,
             margin=dict(l=70, r=55, t=55, b=42),
         )
-        st.plotly_chart(style_fig(fig,360), use_container_width=True)
+        st.plotly_chart(style_fig(fig,360), use_container_width=True, config=PLOTLY_CONFIG)
 
     # Section 7
     compare_years = [selected_year, selected_year-1, selected_year-2]
-    rows = []
-    for y in compare_years:
-        yd = df_all[df_all["year_calc"] == y].copy()
-        cnt = (
-            yd.dropna(subset=["month_calc"])
-            .assign(month_calc=lambda x: x["month_calc"].astype(int))
-            .groupby("month_calc").size()
-            .reindex(range(1,13), fill_value=0)
-        )
-        cum = cnt.cumsum()
-        max_m = datetime.now().month if y == datetime.now().year else 12
-        for m in range(1,max_m+1):
-            rows.append({
-                "เดือน": THAI_MONTHS[m-1],
-                "ปี": str(y),
-                "Fault สะสม": int(cum.loc[m]),
-            })
-
-    cum_df = pd.DataFrame(rows)
+    cum_df = cumulative_counts(df_all, selected_year)
     fig = px.line(
         cum_df, x="เดือน", y="Fault สะสม", color="ปี", markers=True,
         category_orders={"เดือน":THAI_MONTHS, "ปี":[str(y) for y in compare_years]},
@@ -670,7 +698,7 @@ with tab_overview:
         hovermode="x unified",
         margin=dict(l=50, r=35, t=55, b=45),
     )
-    st.plotly_chart(style_fig(fig,540), use_container_width=True)
+    st.plotly_chart(style_fig(fig,540), use_container_width=True, config=PLOTLY_CONFIG)
 
     # Summary cards
     latest_lockout = "ไม่มีข้อมูล"
@@ -708,7 +736,7 @@ with tab_overview:
 # RECURRING + LOCKOUT
 # ============================================================
 
-with tab_recurring:
+if view == "↻ Recurring & Lockout":
     st.subheader("Recurring Fault — สายส่ง + สาเหตุ")
 
     rr = df.copy()
@@ -727,7 +755,7 @@ with tab_recurring:
         fig = px.bar(recur, x="จำนวนครั้ง", y="Pattern", orientation="h",
                      text="จำนวนครั้ง", title="Recurring Fault Pattern")
         fig.update_layout(yaxis={"categoryorder":"total ascending"})
-        st.plotly_chart(style_fig(fig,420), use_container_width=True)
+        st.plotly_chart(style_fig(fig,420), use_container_width=True, config=PLOTLY_CONFIG)
         st.dataframe(
             recur[["line_clean","cause_clean","จำนวนครั้ง"]].rename(
                 columns={"line_clean":"สายส่ง","cause_clean":"สาเหตุ"}
@@ -753,7 +781,7 @@ with tab_recurring:
 # EVENT LOG
 # ============================================================
 
-with tab_event:
+if view == "▤ Event Log":
     st.subheader("Event Log")
 
     preferred = [
@@ -777,7 +805,7 @@ with tab_event:
 
 st.markdown(
     '<div style="text-align:center;color:#6f879a;font-size:11px;padding:20px 0 4px">'
-    'EGAT Fault Dashboard • V7 Performance • Excel → Pandas → Plotly → Streamlit • No AI'
+    'EGAT Fault Dashboard • V8 Fast Startup • Excel → Pandas → Plotly → Streamlit • No AI'
     '</div>',
     unsafe_allow_html=True,
 )
