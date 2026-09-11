@@ -414,7 +414,14 @@ with st.sidebar:
     selected_voltage = st.selectbox("ระดับแรงดัน (kV)", ["ทั้งหมด"] + voltages)
 
     line_search = st.text_input("สายส่ง", placeholder="เช่น CC-PA1#2")
-    cause_search = st.text_input("สาเหตุ", placeholder="เช่น ฟ้าผ่า")
+
+    cause_options = text_options(df_all, "เหตุการณ์")
+    selected_cause = st.selectbox(
+        "สาเหตุ",
+        ["ทั้งหมด"] + cause_options,
+        index=0,
+    )
+
     trip_options = text_options(df_all, "Trip type")
     selected_trip = st.selectbox("Trip type", ["ทั้งหมด"] + trip_options)
 
@@ -435,8 +442,8 @@ if selected_voltage != "ทั้งหมด":
     df = df[v == int(selected_voltage)]
 if line_search.strip():
     df = df[df["สายส่ง"].astype(str).str.contains(line_search.strip(), case=False, na=False, regex=False)]
-if cause_search.strip():
-    df = df[df["เหตุการณ์"].astype(str).str.contains(cause_search.strip(), case=False, na=False, regex=False)]
+if selected_cause != "ทั้งหมด":
+    df = df[df["เหตุการณ์"].fillna("").astype(str).str.strip() == selected_cause]
 if selected_trip != "ทั้งหมด":
     df = df[df["Trip type"].astype(str) == selected_trip]
 
@@ -450,7 +457,7 @@ with st.sidebar:
 เดือน: {m_from} → {m_to}<br>
 แรงดัน: {selected_voltage}<br>
 สายส่ง: {line_search or "ทั้งหมด"}<br>
-สาเหตุ: {cause_search or "ทั้งหมด"}<br>
+สาเหตุ: {selected_cause}<br>
 Trip type: {selected_trip}
 </div>
 """,
@@ -469,7 +476,7 @@ st.markdown(
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • ไม่มี AI • V8.2 Fast Startup
+    • ไม่มี AI • V8.3 Cause Dropdown
   </div>
 </div>
 """,
@@ -805,7 +812,7 @@ if view == "▤ Event Log":
 
 st.markdown(
     '<div style="text-align:center;color:#6f879a;font-size:11px;padding:20px 0 4px">'
-    'EGAT Fault Dashboard • V8.2 Fast Startup • Excel → Pandas → Plotly → Streamlit • No AI'
+    'EGAT Fault Dashboard • V8.3 Cause Dropdown • Excel → Pandas → Plotly → Streamlit • No AI'
     '</div>',
     unsafe_allow_html=True,
 )
