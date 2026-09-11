@@ -469,7 +469,7 @@ st.markdown(
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • ไม่มี AI • V8.1 Fast Startup
+    • ไม่มี AI • V8.2 Fast Startup
   </div>
 </div>
 """,
@@ -494,7 +494,8 @@ if df.empty:
 
 total = len(df)
 trip_norm = df["Trip type"].fillna("").astype(str).str.strip().str.casefold()
-lockout = int(trip_norm.eq("lockout").sum())
+lock_df = df[trip_norm.eq("lockout")].copy()
+lockout = int(len(lock_df))
 reclose = int(trip_norm.eq("reclose").sum())
 
 blackout = 0
@@ -702,7 +703,6 @@ if view == "▣ Overview":
 
     # Summary cards
     latest_lockout = "ไม่มีข้อมูล"
-    lock_df = df[trip_norm.eq("lockout")].copy()
     if not lock_df.empty:
         latest = lock_df.sort_values("วันที่", ascending=False).iloc[0]
         d = latest["วันที่"].strftime("%Y-%m-%d") if not pd.isna(latest["วันที่"]) else "ไม่มีวันที่"
@@ -805,7 +805,7 @@ if view == "▤ Event Log":
 
 st.markdown(
     '<div style="text-align:center;color:#6f879a;font-size:11px;padding:20px 0 4px">'
-    'EGAT Fault Dashboard • V8 Fast Startup • Excel → Pandas → Plotly → Streamlit • No AI'
+    'EGAT Fault Dashboard • V8.2 Fast Startup • Excel → Pandas → Plotly → Streamlit • No AI'
     '</div>',
     unsafe_allow_html=True,
 )
