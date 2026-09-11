@@ -415,11 +415,11 @@ Trip type: {selected_trip}
 st.markdown(
     f"""
 <div class="hero">
-  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก ทสก2-ส.</div>
+  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้องในแผนก หสก2-ส.</div>
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • ไม่มี AI • UI V7 Performance
+    • UI V7 Performance
   </div>
 </div>
 """,
