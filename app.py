@@ -197,7 +197,7 @@ def make_download_url(url: str) -> str:
     return urlunparse(p._replace(query=urlencode(q)))
 
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def download_sharepoint(url: str) -> bytes:
     r = requests.get(
         make_download_url(url),
@@ -214,6 +214,7 @@ def download_sharepoint(url: str) -> bytes:
     return b
 
 
+@st.cache_data(ttl=600, show_spinner=False)
 def read_excel_bytes(b: bytes) -> pd.DataFrame:
     return pd.read_excel(
         io.BytesIO(b),
@@ -233,6 +234,13 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
     df["year_calc"] = df["วันที่"].dt.year
     df["month_calc"] = df["วันที่"].dt.month
     return df
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def load_sharepoint_dataframe(url: str) -> pd.DataFrame:
+    """Download, parse and prepare SharePoint Excel once, then reuse it."""
+    raw = download_sharepoint(url)
+    return prepare(read_excel_bytes(raw))
 
 
 def text_options(df, col):
@@ -316,16 +324,16 @@ with st.sidebar:
 
 try:
     if source_mode == "SharePoint link":
-        raw = download_sharepoint(share_url)
-        df_all = read_excel_bytes(raw)
+        with st.spinner("กำลังโหลดข้อมูลจาก SharePoint..."):
+            df_all = load_sharepoint_dataframe(share_url)
         source_text = "Excel SharePoint"
     else:
         if uploaded is None:
             st.info("กรุณาเลือกไฟล์ Excel")
             st.stop()
         df_all = pd.read_excel(uploaded, sheet_name=SHEET_NAME, header=HEADER_ROW, engine="openpyxl")
+        df_all = prepare(df_all)
         source_text = uploaded.name
-    df_all = prepare(df_all)
 except Exception as e:
     st.error("อ่าน Excel ไม่สำเร็จ")
     st.code(str(e))
@@ -411,7 +419,7 @@ st.markdown(
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • ไม่มี AI • UI V6
+    • ไม่มี AI • UI V7 Performance
   </div>
 </div>
 """,
@@ -769,7 +777,7 @@ with tab_event:
 
 st.markdown(
     '<div style="text-align:center;color:#6f879a;font-size:11px;padding:20px 0 4px">'
-    'EGAT Fault Dashboard • Excel → Pandas → Plotly → Streamlit • No AI'
+    'EGAT Fault Dashboard • V7 Performance • Excel → Pandas → Plotly → Streamlit • No AI'
     '</div>',
     unsafe_allow_html=True,
 )
