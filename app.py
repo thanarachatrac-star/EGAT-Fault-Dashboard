@@ -368,7 +368,7 @@ with st.sidebar:
         uploaded = st.file_uploader("เลือก Excel", type=["xlsx", "xlsm"])
     else:
         share_url = EXCEL_SHAREPOINT_URL
-        if st.button("↻ Refresh Excel", use_container_width=True, config=PLOTLY_CONFIG):
+        if st.button("↻ Refresh Excel", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
 
@@ -420,7 +420,7 @@ with st.sidebar:
 
     st.button("🔎 ค้นหาข้อมูล", use_container_width=True, type="primary")
 
-    if st.button("↻ รีเซ็ตตัวกรอง", use_container_width=True, config=PLOTLY_CONFIG):
+    if st.button("↻ รีเซ็ตตัวกรอง", use_container_width=True):
         st.session_state.clear()
         st.rerun()
 
@@ -469,7 +469,7 @@ st.markdown(
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • ไม่มี AI • V8 Fast Startup
+    • ไม่มี AI • V8.1 Fast Startup
   </div>
 </div>
 """,
