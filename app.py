@@ -505,11 +505,11 @@ Trip type: {selected_trip}
 st.markdown(
     f"""
 <div class="hero">
-  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก ทสก2-ส.</div>
+  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก หสก2-ส.</div>
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • ไม่มี AI • V9 Hybrid Fast Load
+    • V9 Hybrid Fast Load
   </div>
 </div>
 """,
