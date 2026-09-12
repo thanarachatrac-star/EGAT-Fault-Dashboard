@@ -1,5 +1,6 @@
 from pathlib import Path
 import io
+import gzip
 from datetime import datetime
 from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 
@@ -40,14 +41,45 @@ if "text/html" in ct or head.startswith(b"<!doctype html") or head.startswith(b"
     raise RuntimeError("SharePoint returned a sign-in page instead of the Excel file.")
 
 print("Parsing Logbook sheet...")
-df = pd.read_excel(io.BytesIO(data), sheet_name=SHEET_NAME, header=HEADER_ROW, engine="openpyxl")
+df = pd.read_excel(
+    io.BytesIO(data),
+    sheet_name=SHEET_NAME,
+    header=HEADER_ROW,
+    engine="openpyxl",
+)
+
 if "วันที่" in df.columns:
     df["วันที่"] = pd.to_datetime(df["วันที่"], errors="coerce")
 
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-df.to_csv(OUT_FILE, index=False, compression="gzip", encoding="utf-8-sig")
-META_FILE.write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
+# Build canonical CSV bytes first. This lets us compare the actual data
+# instead of gzip timestamps or metadata timestamps.
+csv_text = df.to_csv(index=False, lineterminator="\n")
+csv_bytes = csv_text.encode("utf-8-sig")
 
-print(f"Snapshot created: {OUT_FILE}")
-print(f"Rows: {len(df):,}")
-print(f"Size: {OUT_FILE.stat().st_size/1024:.1f} KB")
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+old_csv_bytes = None
+if OUT_FILE.exists():
+    try:
+        with gzip.open(OUT_FILE, "rb") as f:
+            old_csv_bytes = f.read()
+    except Exception:
+        old_csv_bytes = None
+
+if old_csv_bytes == csv_bytes:
+    print("No data changes detected. Snapshot left unchanged.")
+    print(f"Rows: {len(df):,}")
+else:
+    # Write deterministic gzip (mtime=0) so identical data produces identical bytes.
+    with OUT_FILE.open("wb") as raw:
+        with gzip.GzipFile(fileobj=raw, mode="wb", mtime=0) as gz:
+            gz.write(csv_bytes)
+
+    META_FILE.write_text(
+        datetime.now().isoformat(timespec="seconds"),
+        encoding="utf-8",
+    )
+
+    print(f"Snapshot updated: {OUT_FILE}")
+    print(f"Rows: {len(df):,}")
+    print(f"Size: {OUT_FILE.stat().st_size/1024:.1f} KB")
