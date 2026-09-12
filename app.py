@@ -52,6 +52,21 @@ BAR_COLORS = [
     "#7B8FA6",  # slate
 ]
 
+CAUSE_COLORS = {
+    "ฟ้าผ่า": "#1677ff",
+    "สัตว์": "#22b8f5",
+    "ไฟไหม้ใต้แนวสาย": "#f97316",
+    "มลภาวะ/ฝุ่นดิน": "#f5b51b",
+    "มูลนก": "#19c463",
+    "เครื่องจักร/บุคคลภายนอก": "#ef4444",
+    "ต้นไม้ในเขตเดินสาย": "#84cc16",
+    "ต้นไม้นอกเขตเดินสาย": "#a855f7",
+    "สิ่งแปลกปลอม": "#ec4899",
+    "อุปกรณ์ชำรุด/คลาดเคลื่อน": "#14b8a6",
+    "ไม่ทราบสาเหตุ": "#94a3b8",
+}
+    
+
 def apply_bar_colors(fig, colors=None):
     """Give each bar/category a distinct readable color."""
     colors = colors or BAR_COLORS
@@ -361,12 +376,12 @@ def style_fig(fig, height=330, legend_top=True):
     return fig
 
 
-def donut(values, names, title, center_text):
+def donut(values, names, title, center_text, colors=None):
     fig = go.Figure(go.Pie(
         labels=names,
         values=values,
         hole=.58,
-        marker=dict(colors=BAR_COLORS),
+        marker=dict(colors=colors or BAR_COLORS),
         textinfo="none",
         hovertemplate="%{label}: %{value} ครั้ง<extra></extra>",
     ))
@@ -593,6 +608,7 @@ if view == "▣ Overview":
         df["เหตุการณ์"].fillna("ไม่ทราบสาเหตุ").replace("", "ไม่ทราบสาเหตุ")
         .value_counts()
     )
+
     with c1:
         st.plotly_chart(
             donut(
@@ -600,10 +616,14 @@ if view == "▣ Overview":
                 cause_counts.index,
                 "1) สาเหตุไฟฟ้าขัดข้อง",
                 f"<b>{total}</b><br><span style='font-size:12px'>ครั้ง</span>",
+                colors=[
+                    CAUSE_COLORS.get(str(cause).strip(), "#64748b")
+                    for cause in cause_counts.index
+                ],
             ),
-            use_container_width=True, config=PLOTLY_CONFIG,
+            use_container_width=True,
+            config=PLOTLY_CONFIG,
         )
-
     monthly = (
         df.dropna(subset=["month_calc"])
         .assign(month_calc=lambda x: x["month_calc"].astype(int))
