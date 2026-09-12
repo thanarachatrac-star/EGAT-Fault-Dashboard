@@ -260,8 +260,8 @@ def load_sharepoint_dataframe(url: str) -> pd.DataFrame:
     return prepare(read_excel_bytes(raw))
 
 
-@st.cache_data(ttl=1800, show_spinner=False)
-def load_snapshot(path_str: str) -> pd.DataFrame:
+@st.cache_data(show_spinner=False)
+def load_snapshot(path_str: str, file_mtime_ns: int) -> pd.DataFrame:
     path = Path(path_str)
     df = pd.read_csv(path, compression="gzip", low_memory=False)
     if "วันที่" in df.columns:
@@ -280,6 +280,21 @@ def save_runtime_snapshot(df: pd.DataFrame) -> None:
         SNAPSHOT_META_PATH.write_text(datetime.now().isoformat(timespec="seconds"), encoding="utf-8")
     except Exception:
         pass
+
+
+def snapshot_updated_text() -> str:
+    try:
+        if SNAPSHOT_META_PATH.exists():
+            raw = SNAPSHOT_META_PATH.read_text(encoding="utf-8").strip()
+            dt = datetime.fromisoformat(raw)
+            return dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        pass
+    try:
+        dt = datetime.fromtimestamp(SNAPSHOT_PATH.stat().st_mtime)
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except Exception:
+        return "-"
 
 
 def text_options(df, col):
@@ -403,13 +418,14 @@ try:
     if source_mode == "SharePoint link":
         force_live = bool(st.session_state.pop("force_live_refresh", False))
         if SNAPSHOT_PATH.exists() and not force_live:
-            df_all = load_snapshot(str(SNAPSHOT_PATH))
-            source_text = "Local snapshot (fast)"
+            df_all = load_snapshot(str(SNAPSHOT_PATH), SNAPSHOT_PATH.stat().st_mtime_ns)
+            source_text = f"Auto-sync SharePoint • Updated {snapshot_updated_text()}"
+            st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
         else:
             with st.spinner("กำลังเชื่อมต่อ SharePoint และเตรียม Dashboard..."):
                 df_all = load_sharepoint_dataframe(share_url)
             save_runtime_snapshot(df_all)
-            source_text = "Excel SharePoint (live)"
+            source_text = f"Excel SharePoint (live) • Updated {datetime.now().strftime('%d/%m/%Y %H:%M')}"
     else:
         if uploaded is None:
             st.info("กรุณาเลือกไฟล์ Excel")
@@ -505,11 +521,11 @@ Trip type: {selected_trip}
 st.markdown(
     f"""
 <div class="hero">
-  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก หสก2-ส.</div>
+  <div class="hero-title">⚡ Dashboard สรุปสถิติไฟฟ้าขัดข้อง ในแผนก ทสก2-ส.</div>
   <div class="hero-sub">
     Source of Truth: {source_text} / Sheet {SHEET_NAME}
     • อัปเดตล่าสุด {datetime.now().strftime("%d/%m/%Y %H:%M")}
-    • V9 Hybrid Fast Load
+    • ไม่มี AI • V10.2 Auto Refresh Snapshot
   </div>
 </div>
 """,
@@ -845,7 +861,7 @@ if view == "▤ Event Log":
 
 st.markdown(
     '<div style="text-align:center;color:#6f879a;font-size:11px;padding:20px 0 4px">'
-    'EGAT Fault Dashboard • V9 Hybrid Fast Load • Excel → Pandas → Plotly → Streamlit • No AI'
+    'EGAT Fault Dashboard • V10.2 Auto Refresh Snapshot • Excel → Pandas → Plotly → Streamlit • No AI'
     '</div>',
     unsafe_allow_html=True,
 )
