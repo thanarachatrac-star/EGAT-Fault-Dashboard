@@ -420,7 +420,6 @@ try:
         if SNAPSHOT_PATH.exists() and not force_live:
             df_all = load_snapshot(str(SNAPSHOT_PATH), SNAPSHOT_PATH.stat().st_mtime_ns)
             source_text = f"Auto-sync SharePoint • Updated {snapshot_updated_text()}"
-            st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
         else:
             with st.spinner("กำลังเชื่อมต่อ SharePoint และเตรียม Dashboard..."):
                 df_all = load_sharepoint_dataframe(share_url)
