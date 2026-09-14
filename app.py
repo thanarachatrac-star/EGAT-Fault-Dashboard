@@ -65,6 +65,12 @@ CAUSE_COLORS = {
     "อุปกรณ์ชำรุด/คลาดเคลื่อน": "#14b8a6",
     "ไม่ทราบสาเหตุ": "#94a3b8",
 }
+
+KV_COLORS = {
+    "115 kV": "#10B981",
+    "230 kV": "#EF4444",
+    "500 kV": "#8B5CF6",
+}
     
 
 def apply_bar_colors(fig, colors=None):
@@ -657,6 +663,7 @@ if view == "▣ Overview":
         pd.to_numeric(df["Voltage (kV)"], errors="coerce")
         .dropna().astype(int).value_counts().sort_index()
     )
+
     with c3:
         names = [f"{x} kV" for x in volt_counts.index]
         st.plotly_chart(
@@ -665,8 +672,13 @@ if view == "▣ Overview":
                 names,
                 "3) แยกตามระดับแรงดัน (kV)",
                 f"<b>{total}</b><br><span style='font-size:12px'>ครั้ง</span>",
+                colors=[
+                    KV_COLORS.get(name, "#64748b")
+                    for name in names
+                ],
             ),
-            use_container_width=True, config=PLOTLY_CONFIG,
+            use_container_width=True,
+            config=PLOTLY_CONFIG,
         )
 
     # Row 2: TMU / annual / top line
